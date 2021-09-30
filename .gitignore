@@ -1,0 +1,5 @@
+.DS_Store
+.env
+
+docker-compose/airflow/reports/output
+logs/

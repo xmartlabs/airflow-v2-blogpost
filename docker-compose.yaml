@@ -1,0 +1,63 @@
+version: '3'
+
+services:
+  airflow:
+    build: docker/airflow
+    ports:
+      - "8080:8080"
+    depends_on:
+      airflow_db:
+        condition: service_healthy
+    environment:
+      AIRFLOW__CORE__FERNET_KEY: $FERNET_SECRET_KEY
+      AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow_db/airflow
+      # See next link for more info about managing connections: https://airflow.apache.org/docs/apache-airflow/stable/howto/connection.html#storing-a-connection-in-environment-variables
+      AIRFLOW_CONN_AWESOME_ETL_AWS_CONN: aws:///?aws_access_key_id=$AWS_ACCESS_KEY_ID&aws_secret_access_key=$AWS_SECRET_ACCESS_KEY&region_name=$AWS_REGION_NAME
+      AIRFLOW_CONN_AWESOME_ETL_APP_DB_CONN: 'postgresql://app:app-pass@app_db:5432/app'
+      # See next link for more info about managing variables: https://airflow.apache.org/docs/apache-airflow/stable/howto/variable.html#storing-variables-in-environment-variables
+      # Notice that neither connections nor variables created with envs will show up in the UI. To check they were defined
+      # correctly you can use airflow cli inside the `airflow` docker compose service:
+      #   $ airflow connections get awesome_etl_aws_conn
+      #   $ airflow variables get awesome_etl_hubspot_api_key
+      AIRFLOW_VAR_AWESOME_ETL_AWS_CONNECTION_ID: awesome_etl_aws_conn
+      AIRFLOW_VAR_AWESOME_ETL_APP_DB_CONNECTION_ID: awesome_etl_app_db_conn
+      AIRFLOW_VAR_AWESOME_ETL_BUCKET: $BUCKET
+      AIRFLOW_VAR_AWESOME_ETL_HUBSPOT_API_KEY: $HUBSPOT_API_KEY
+    volumes:
+      - ./docker-compose/airflow/docker-init:/app/airflow/docker-init
+      - ./logs/airflow/:/app/airflow/logs
+      - ./src/airflow/dags:/app/airflow/dags
+    entrypoint: /bin/bash -c "/app/airflow/docker-init/init.sh && sh /app/airflow/entrypoint.sh"
+
+  airflow_db:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - airflow-db-volume:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 5s
+      retries: 5
+    restart: always
+
+  app_db:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app-pass
+      POSTGRES_DB: app
+    volumes:
+      - app-db-volume:/var/lib/postgresql/data
+      - ./docker-compose/app_db:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "app"]
+      interval: 5s
+      retries: 5
+    restart: always
+
+volumes:
+  airflow-db-volume:
+  app-db-volume:
