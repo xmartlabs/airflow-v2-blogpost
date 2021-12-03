@@ -1,87 +1,99 @@
-from datetime import timedelta
-from textwrap import dedent
+import json
+import requests
+import os
 
-# The DAG object; we'll need this to instantiate a DAG
-from airflow import DAG
+from datetime import timedelta, datetime
 
-# Operators; we need this to operate!
-from airflow.operators.bash import BashOperator
+from airflow.decorators import dag, task, task_group
+from airflow.models import Variable
+from airflow.providers.amazon.aws.hooks.s3 import S3Hook
+from airflow.providers.postgres.hooks.postgres import PostgresHook
+
 from airflow.utils.dates import days_ago
-# These args will get passed on to each operator
-# You can override them on a per-task basis during operator initialization
-default_args = {
+
+
+AWS_BUCKET_NAME = Variable.get('awesome_etl_bucket')
+AWS_BUCKET_PREFIX = 'xl-data/awesome_etl_v2'
+AWS_S3_CONNECTION_ID = Variable.get('awesome_etl_aws_connection_id')
+APP_DB_CONNECTION_ID = Variable.get('awesome_etl_app_db_connection_id')
+
+HUBSPOT_API_KEY = Variable.get('awesome_etl_hubspot_api_key')
+if not HUBSPOT_API_KEY:
+    raise ValueError('awesome_etl_hubspot_api_key variable must be set with a valid Hubspot API KEY.')
+
+DEFAULT_ARGS = {
     'owner': 'airflow',
     'depends_on_past': False,
-    'email': ['airflow@example.com'],
+    'email': ['miguel@xmartlabs.com'],
     'email_on_failure': False,
     'email_on_retry': False,
     'retries': 1,
     'retry_delay': timedelta(minutes=5),
-    # 'queue': 'bash_queue',
-    # 'pool': 'backfill',
-    # 'priority_weight': 10,
-    # 'end_date': datetime(2016, 1, 1),
-    # 'wait_for_downstream': False,
-    # 'dag': dag,
-    # 'sla': timedelta(hours=2),
-    # 'execution_timeout': timedelta(seconds=300),
-    # 'on_failure_callback': some_function,
-    # 'on_success_callback': some_other_function,
-    # 'on_retry_callback': another_function,
-    # 'sla_miss_callback': yet_another_function,
-    # 'trigger_rule': 'all_success'
+    'start_date': days_ago(2),
 }
-with DAG(
-    'tutorial',
-    default_args=default_args,
-    description='A simple tutorial DAG',
-    schedule_interval=timedelta(days=1),
-    start_date=days_ago(2),
-    tags=['example'],
-) as dag:
 
-    # t1, t2 and t3 are examples of tasks created by instantiating operators
-    t1 = BashOperator(
-        task_id='print_date',
-        bash_command='date',
-    )
+@dag(default_args=DEFAULT_ARGS, schedule_interval='@Daily')
+def awesome_etl_v2():
 
-    t2 = BashOperator(
-        task_id='sleep',
-        depends_on_past=False,
-        bash_command='sleep 5',
-        retries=3,
-    )
-    t1.doc_md = dedent(
-        """\
-    #### Task Documentation
-    You can document your task using the attributes `doc_md` (markdown),
-    `doc` (plain text), `doc_rst`, `doc_json`, `doc_yaml` which gets
-    rendered in the UI's Task Instance Details page.
-    ![img](http://montcs.bloomu.edu/~bobmon/Semesters/2012-01/491/import%20soul.png)
+    @task_group()
+    def extract():
+        @task()
+        def extract_from_api():
+            url = f'https://api.hubapi.com/crm/v3/objects/contacts?hapikey={HUBSPOT_API_KEY}'
+            response = requests.get(url)
+            json = response.json()
+            return {'contacts': json['results']}
 
-    """
-    )
+        @task()
+        def extract_from_db():
+            hook = PostgresHook(postgres_conn_id=APP_DB_CONNECTION_ID)
+            cursor = hook.get_conn().cursor()
+            cursor.execute("SELECT * FROM public.contacts")
+            return {
+                'contacts': [row for row in cursor.fetchall()]
+            }
 
-    dag.doc_md = __doc__  # providing that you have a docstring at the beggining of the DAG
-    dag.doc_md = """
-    This is a documentation placed anywhere
-    """  # otherwise, type it like this
-    templated_command = dedent(
-        """
-    {% for i in range(5) %}
-        echo "{{ ds }}"
-        echo "{{ macros.ds_add(ds, 7)}}"
-        echo "{{ params.my_param }}"
-    {% endfor %}
-    """
-    )
+        return {
+            'api_data': extract_from_api(),
+            'db_data': extract_from_db(),
+        }
 
-    t3 = BashOperator(
-        task_id='templated',
-        depends_on_past=False,
-        bash_command=templated_command,
-        params={'my_param': 'Parameter I passed in'},
-    )
+    @task()
+    def transform(data):
+        api_data = data['api_data']['contacts']
+        db_data = data['db_data']['contacts']
+        data = []
+        for api_row in api_data:
+            email = api_row.get('properties', {}).get('email', None)
+            db_row = next((x for x in db_data if x[1] == email), None)
+            row = {
+            'db_id': db_row[0],
+            'api_id': api_row['id'],
+            'email': email,
+            'created_at': api_row.get('createdAt'),
+            'hero_name': db_row[4],
+            'address': db_row[5],
+            'favorite_color': db_row[6],
+            'full_name': f"{api_row.get('properties', {}).get('firstname')} {api_row.get('properties', {}).get('lastname')}",
+            'api_archived': api_row.get('archived')
+            }
+            data.append(row)
 
-    t1 >> [t2, t3]
+        with open('/awesome_etl/output/transformed_data.json', 'w') as file:
+            for row in data:
+                file.write(json.dumps(row))
+                file.write('\n')
+        
+        return { 'output_file': '/awesome_etl/output/transformed_data.json' }
+
+    @task()
+    def load(output):
+        hook = S3Hook(AWS_S3_CONNECTION_ID)
+        base_key = f'{AWS_BUCKET_PREFIX}/{datetime.utcnow().isoformat()}/'
+        file_name = os.path.basename(output['output_file'])
+        hook.load_file(output['output_file'], base_key + file_name, AWS_BUCKET_NAME)
+
+    load(transform(extract()))
+
+
+etl_dag = awesome_etl_v2()
