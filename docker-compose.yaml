@@ -11,6 +11,7 @@ services:
     environment:
       AIRFLOW__CORE__FERNET_KEY: $FERNET_SECRET_KEY
       AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow_db/airflow
+      AIRFLOW__CORE__XCOM_BACKEND: common.pandas_to_s3.PandasToS3XComBackend
       # See next link for more info about managing connections: https://airflow.apache.org/docs/apache-airflow/stable/howto/connection.html#storing-a-connection-in-environment-variables
       AIRFLOW_CONN_AWESOME_ETL_AWS_CONN: aws:///?aws_access_key_id=$AWS_ACCESS_KEY_ID&aws_secret_access_key=$AWS_SECRET_ACCESS_KEY&region_name=$AWS_REGION_NAME
       AIRFLOW_CONN_AWESOME_ETL_APP_DB_CONN: 'postgresql://app:app-pass@app_db:5432/app'
@@ -23,10 +24,12 @@ services:
       AIRFLOW_VAR_AWESOME_ETL_APP_DB_CONNECTION_ID: awesome_etl_app_db_conn
       AIRFLOW_VAR_AWESOME_ETL_BUCKET: $BUCKET
       AIRFLOW_VAR_AWESOME_ETL_HUBSPOT_API_KEY: $HUBSPOT_API_KEY
+      PYTHONPATH: /app/airflow
     volumes:
       - ./docker-compose/airflow/docker-init:/app/airflow/docker-init
       - ./logs/airflow/:/app/airflow/logs
       - ./src/airflow/dags:/app/airflow/dags
+      - ./src/airflow/xcom:/app/airflow/common
     entrypoint: /bin/bash -c "/app/airflow/docker-init/init.sh && sh /app/airflow/entrypoint.sh"
 
   airflow_db:

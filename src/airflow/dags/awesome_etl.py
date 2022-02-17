@@ -11,6 +11,7 @@ from airflow.providers.postgres.hooks.postgres import PostgresHook
 
 from airflow.utils.dates import days_ago
 
+import pandas as pd
 
 AWS_BUCKET_NAME = Variable.get('awesome_etl_bucket')
 AWS_BUCKET_PREFIX = 'xl-data/awesome_etl_v2'
@@ -97,3 +98,23 @@ def awesome_etl_v2():
 
 
 etl_dag = awesome_etl_v2()
+
+
+@dag(default_args=DEFAULT_ARGS, schedule_interval='@Daily')
+def custom_xcom_dag():
+    @task
+    def write_xcom_backend():
+        return pd.DataFrame.from_dict({
+            'id': [123, 234, 345],
+            'date': [1643724967, 1643723967, 1643714967],
+            'name': ['spiderman', 'ironman', 'hulk']
+        })
+    
+    @task
+    def read_xcom_backend(data_frame):
+        print(f'data_frame => {data_frame}')
+
+    read_xcom_backend(write_xcom_backend())
+
+
+custom_xcom_dag = custom_xcom_dag()
