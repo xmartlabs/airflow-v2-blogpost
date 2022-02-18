@@ -1,6 +1,6 @@
 # Airflow
 
-Companion source code for the ["4 reasons why you should use Airflow’s Taskflow API"]() blog post at blog.xmartlabs.com.
+Companion source code for the ["4 reasons why you should use Airflow’s Taskflow API"](https://github.com/m-revetria/airflow-v2-blogpost) blog post at [blog.xmartlabs.com](blog.xmartlabs.com).
 
 The repository is split in two main branches:
 * [airflow-v1](https://github.com/xmartlabs/airflow-v2-blogpost/tree/airflow-v1): contains the code of our example DAG implemented using v1-like Airflow API. It doesn't take advantage of any of the features introduced in Taskflow.
