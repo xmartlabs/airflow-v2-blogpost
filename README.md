@@ -1,6 +1,19 @@
 # Airflow
 
+Companion source code for the ["4 reasons why you should use Airflow’s Taskflow API"]() blog post at blog.xmartlabs.com.
+
+The repository is split in two main branches:
+* [airflow-v1](https://github.com/xmartlabs/airflow-v2-blogpost/tree/airflow-v1): contains the code of our example DAG implemented using v1-like Airflow API. It doesn't take advantage of any of the features introduced in Taskflow.
+* [airflow-v2](https://github.com/xmartlabs/airflow-v2-blogpost/tree/airflow-v2): using Taskflow, we've implemented our DAG in a short and easy-to-read manner.
+
+These two branches above can be diff'ed to see some of the changes introduced in Taskflow.
+
 ## Structure of the project
+
+* [`docker`](./docker/): custom Docker images
+* [`docker-compose`](./docker-compose/): entry points and initialization files used by the Docker container runs with `docker compose`
+* [`src/airflow`](./src/airflow/): contains the source code of our DAGs
+* [`docker-compose.ylm`](./docker-compose.yaml): `docker compose` file. It will starts up Airflow and any additional service required to run the examples.
 
 ## Development setup
 
