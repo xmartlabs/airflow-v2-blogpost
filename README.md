@@ -17,9 +17,44 @@ These two branches above can be diff'ed to see some of the changes introduced in
 
 ## Development setup
 
+In order to run the DAGs in this repo you need to set up a couple of accounts first:
+
+1. An AWS account is required to store the DAGs' results in S3. In your account you need to create an S3 bucket and an IAM user with programmatic access and with the next policy attached:
+
+```json
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "ListObjectsInBucket",
+            "Effect": "Allow",
+            "Action": [
+                "s3:ListBucket"
+            ],
+            "Resource": [
+                "arn:aws:s3:::<bucket-name>"
+            ]
+        },
+        {
+            "Sid": "AllObjectActions",
+            "Effect": "Allow",
+            "Action": "s3:*Object*",
+            "Resource": [
+                "arn:aws:s3:::<bucket-name>/xl-data/*",
+                "arn:aws:s3:::<bucket-name>/airflow-xcom/*"
+            ]
+        }
+    ]
+}
+```
+
+> Note: replace <bucket-name> in the above snippet with the name of your own bucket and keep the path as they are, they're hardcoded in the DAG's definition, oops our fault.
+
+2. Create an free account in [HobSpot](https://www.hubspot.com/) and then get your API key, follow [this link](https://knowledge.hubspot.com/integrations/how-do-i-get-my-hubspot-api-key) to see how.
+
 ### Setting up the environment
 
-Copy [.env.example](.env.example) to `.env` and replace placeholders with appropriated values for them.
+Copy [.env.example](.env.example) to `.env` and replace placeholders with appropriated values for them. You should already have everything you need from the previous section.
 Load `.env` before running docker compose.
 
 Installing [autoenv](https://github.com/inishchith/autoenv) or similar is recommended to automatically load your `.env` file.
